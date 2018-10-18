@@ -1,0 +1,61 @@
+# This is the parameters file for COMet
+# Anything after # is ignored, use for comments
+
+# -- The files to take input from --
+MetadColvarFile = TestingInput/COLVAR
+NewColvarFile = TestingInput/NEW_COLVAR_EXT_2
+NewColvarFilePath = TestingInput/NEW_COLVAR_EXT_2_PATH_p2
+
+# Only specify one of these two, comment out or delete the other
+#FesPrefix = TestingInput/fes_
+FesDataFile = TestingInput/ebetac_list.txt
+
+# -- Further specifications of the files --
+# Columns are zero-indexed, no spaces after commas
+#ScalingColumn = 4
+BiasColumns = 3
+NewColumns = 2,3,10-13,15,16
+NewColumnsPath = 2,3,10-13,15,16
+
+# Specifications of periodic variables (if any)
+#PeriodicColumns = 1,4-6
+#PeriodicColumnsPath = 1,4-6
+#PeriodicRange = 6.2832,6.2832,6.2832,6.2832
+
+# The following are only relevant for FesPrefix
+FreeEnergyColumn = 2
+FesFilesCount = 367
+
+# -- Additional specifications --
+kT = 2.5
+Gamma = 9  # Biasfactor, 0 for non-tempered metadynamics, only relevant for FesPrefix
+Grid = 100  # Number of bins to reweight to
+LengthTarget = 10  # Number of snapshots to use
+AnnealingkT = 0.5  # Initial kT for simulated annealing
+AnnealingSteps = 25000
+
+# -- Optional arguments --
+LogFile = log_dasa_spath_part2.dat  # Log file name, default log_spectral_gaps.dat
+EuclideanDistance = 1  # Whether to use euclidean distance, default false
+AlternativeInfinity = 1  # Whether to replace infinities by maximum value rather than interpolate, default false
+LogPathEnergy = 1  # Whether to log optimised path energy, default false
+#LogEigenvalues = 10  # Number of highest eigenvalues to log, default 0
+Rescale = 0  # Whether to rescale variables to (0, 1) range, default true
+Barriers = -2  # Used to define the number of barriers, default -1 (first real gap definition), -2 means automatic counting
+Threshold = 1.5  # Used to define the threshold for counting a barrier in units of kT, default 1.0
+TimeColumn = 0  # The time column in the colvar files (for alignment), default 0, set -1 for length alignment only
+#CoeffList = test_coeffs_dasa_standard.dat  # The file to load coefficients from, not used by default
+#TryAll = 1  # Whether to test all variables by themselves, rather than a combination, default false
+#Random = 1  # Whether to explore coefficients completely randomly, default false
+LengthTolerance = 1  # The acceptable variation in number of snapshots, default 0
+StrictOrder = 0  # Whether to enforce sensible distances (2nd neighbour longer than 1st), default false
+#Path2D = 1  # Whether to use also the z path variable, default false
+LimitIncorrect = 0  # Whether to set a limit for the number of invalid PCV values, default false
+InfLimit = 0.0  # The maximum value for the ratio of invalid values, default 0.0
+Cooling = 0.999  # Geometric cooling multiplication coefficient, default -1.0 (linear cooling)
+#ZLimit = 0.05  # The maximum value of z for points to be considered in reweighting, default -1.0 (no limit)
+#ConvertPeriodic = 1  # Whether to introduce extra coefficients for turning periodic vars into cosines, default false
+#PeriodicCoeffList = best_pc_p1_2.dat  # The file to load periodic coefficients from, not used by default, used only with CoeffList
+SmoothCount = 1  # Whether to smooth the surface for counting barriers, default false
+#NoPath = 1  # Whether to ignore path and just treat it as SGOOP, default false
+#Seed = -1  # Seed for PRNG, negative means random
