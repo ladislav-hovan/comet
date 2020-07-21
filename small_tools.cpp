@@ -7,7 +7,7 @@
 
 #include "small_tools.h"
 
-bool isEmpty(std::string strInput) 
+bool isEmpty(string strInput) 
 {
 	int nCount = 0;
 
@@ -20,7 +20,7 @@ bool isEmpty(std::string strInput)
 	return true;
 }
 
-void handleSeparated(vector<int> &vnSequence, bool &bRange, std::string &strMember, int nRangeStart)
+void handleSeparated(vector<int> &vnSequence, bool &bRange, string &strMember, int nRangeStart)
 {
 	int nMember = std::stoi(strMember);
 
@@ -45,10 +45,10 @@ void handleSeparated(vector<int> &vnSequence, bool &bRange, std::string &strMemb
 	strMember.clear();
 }
 
-vector<int> separateString(std::string strSequence)
+vector<int> separateString(string strSequence)
 {
 	vector<int> vnSequence;
-	std::string strMember;
+	string strMember;
 	int nCount = 0, nRangeStart = 0;
 	bool bRange = false;
 
@@ -73,10 +73,10 @@ vector<int> separateString(std::string strSequence)
 	return vnSequence;
 }
 
-vector<double> separateStringDoubles(std::string strSequence)
+vector<double> separateStringDoubles(string strSequence)
 {
 	vector<double> vdSequence;
-	std::string strMember;
+	string strMember;
 	int nCount = 0;
 
 	while (strSequence[nCount])
@@ -100,12 +100,38 @@ vector<double> separateStringDoubles(std::string strSequence)
 	return vdSequence;
 }
 
-std::string trimWhitespace(std::string strInput)
+string trimWhitespace(string strInput)
 {
 	size_t nFirst = strInput.find_first_not_of(" \t");
 	size_t nSecond = strInput.find_last_not_of(" \t");
 
-	std::string strOutput = strInput.substr(nFirst, nSecond - nFirst + 1);
+	string strOutput = strInput.substr(nFirst, nSecond - nFirst + 1);
 
 	return strOutput;
+}
+
+double setDecimal(double dValue, int nFigures)
+{
+	double dShift = std::pow(10, nFigures);
+
+	return std::round(dValue * dShift) / dShift;
+}
+
+double setSignificant(double dValue, int nFigures)
+{
+	int nLog = std::ceil(std::log10(dValue));
+	double dShift = std::pow(10, nFigures - nLog);
+
+	return std::round(dValue * dShift) / dShift;
+}
+
+void setSignificant(vector<double> &vdValues, int nFigures)
+{
+	for (double& dValue : vdValues)
+	{
+		int nLog = std::ceil(std::log10(dValue));
+		double dShift = std::pow(10, nFigures - nLog);
+
+		dValue = std::round(dValue * dShift) / dShift;
+	}
 }

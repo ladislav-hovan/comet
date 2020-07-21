@@ -14,17 +14,24 @@
 #include <iostream>
 #include <sstream>
 #include <cstdarg>
-#include <experimental/filesystem>
+//#include <experimental/filesystem>
+#include <filesystem>
 #include "input_data.h"
+#include "solution.h"
 
 using std::vector;
-namespace fs = std::experimental::filesystem;
+using std::string;
+using vector2d = vector< vector<double> >;
 
-void writeDataFile(std::string strFilename, vector<double> &vdData);
-void writeDataFile(std::string strFilename, vector< vector<double> > &vvdData);
-void backupFile(std::string strFilename);
-void printNumbersToFile(std::ofstream &Output, std::string strDecoder, ...);
-void createColvarFile(vector< vector<double> > &vvdNewColvarsPath, vector<int> &vnSnapshots, std::string strFilename="COLVAR_PATH");
+//namespace fs = std::experimental::filesystem;
+namespace fs = std::filesystem;
+
+void writeDataFile(string strFilename, vector<double> &vdData);
+void writeDataFile(string strFilename, vector2d &vvdData);
+void backupFile(string strFilename);
+void createColvarFile(vector2d &vvdNewColvarsPath, vector<int> &vnSnapshots, int nPrecision, 
+	string strFilename="COLVAR_PATH");
+void createPlumedFile(Solution &sBest, vector2d &vvdLimits, InputData &sInput, string strFilename="plumed_path.dat");
 
 // Template functions
 template <typename T>
@@ -50,7 +57,7 @@ void printNumberToFile(std::ofstream &Output, T tValue, bool bTerminate=false)
 }
 
 template <typename T>
-void printNumbersToFile(std::ofstream &Output, vector<T> vtValues, bool bTerminate=false) 
+void printNumbersToFile(std::ofstream &Output, vector<T> vtValues, bool bTerminate=false)
 {
 	for (auto tValue: vtValues)
 		Output << tValue << " ";

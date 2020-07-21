@@ -13,6 +13,7 @@
 #include <limits>
 #include <cmath>
 #include <cstdlib>
+#include <algorithm>
 #include "error_codes.h"
 #include "input_data.h"
 
@@ -22,6 +23,7 @@ using vector2d = vector< vector<double> >;
 vector<double> sumColumns(vector2d &vvdData, vector<int> &vnColumns);
 vector<double> sumColumns(vector2d &vvdData);
 vector2d selectColumns(vector2d &vvdData, vector<int> &vnColumns, InputData &sInput, bool bPath);
+vector2d getLimits(vector2d &vvdDataLimits);
 vector2d rescaleDataRange(vector2d &vvdDataLimits, vector2d &vvdDataToScale, InputData &sInput, bool bPath);
 vector2d createTestingList(int nCoefficients);
 
@@ -77,8 +79,7 @@ void alignEndTime(vector< vector<T1> > &vvtData1, vector< vector<T2> > &vvtData2
 		cutExtraTimes(vvtData2, dEndTime1, nTimeColumn);
 	else if (dEndTime1 > dEndTime2)
 		cutExtraTimes(vvtData1, dEndTime2, nTimeColumn);
-	// Because of how doubles work, they will never be equal
-	// It doesn't matter though, if they were, no alignment needed
+	// If they are equal, no alignment needed
 }
 
 template <typename T1, typename T2>
@@ -102,7 +103,7 @@ void alignTimes(vector< vector<T1> > &vvtDataLong, vector< vector<T2> > &vvtData
 	auto tTargetTime = (*Target)[nTimeColumn];
 	vector< vector<T1> > vvtShortened;
 	bool bDone = false;
-	auto tPreviousTime = -1;  // Intentionally invalid
+	T1 tPreviousTime = -1;  // Intentionally invalid
 
 	for (unsigned int nCount = 0; nCount < vvtDataLong.size(); ++nCount)
 	{

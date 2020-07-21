@@ -23,10 +23,12 @@
 #include "output.h"
 
 using std::vector;
-typedef vector< vector<double> > vector2d;
+using std::string;
+using vector2d = vector< vector<double> >;
+
 const double dInf = std::numeric_limits<double>::infinity();
 
-struct PathData 
+struct PathData
 {
 	vector<int> vnSnapshots;  // Also includes length via size()
 	double dEnergy;
@@ -55,14 +57,14 @@ public:
 	double getLambda();
 	vector<double> getEigenvalues(int nEigenvalues=-1);
 	vector<int> getSnapshots();
-	void saveDistances(std::string strFilename="dist_matrix.dat");
+	void saveDistances(string strFilename="dist_matrix.dat");
 
 private:
 	// Private constructor to be called by other constructors
 	Path(vector<double> &vdCoefficients, InputData &sInput, vector2d &vvdNewColvarsPath);
 
 	vector<double> m_vdCoefficients;
-	vector< vector<double> > m_vvdMatrix;
+	vector2d m_vvdMatrix;
 	vector<int> m_vnSnapshots;
 	vector<double> m_vdEnergies;
 	vector<double> m_vdPeriodicRanges;
@@ -73,12 +75,14 @@ private:
 	double m_dSpectralGap = -1.0;  // Same
 	double m_dkT = -1.0;  // Same
 	double m_dThreshold = -1.0;  // This technically isn't invalid, but will be overwritten anyway
+	double m_dSmoothRatio = -1.0;  // Intentionally invalid
 	unsigned int m_nTotalSnapshots = 0;
 	unsigned int m_nLengthTarget = 0;
 	unsigned int m_nLengthTolerance = 0;
 	unsigned int m_nViolations = 0;
 	bool m_bStrict = false;
 	bool m_bSmoothCount = false;
+	bool m_bVerbose = false;
 
 	// Holds best path data
 	PathData sBestPath;
@@ -101,7 +105,7 @@ private:
 	// Initialisation functions
 	void initialiseSnapshots(unsigned int nSnapshots, bool bPrint=true);
 	void setPeriodicity(InputData &sInput);
-	void loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPath, bool bEuclidean);
+	void loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPath);
 	void assignEnergies(vector<double> &vdGrid, vector<double> &vdFes, vector2d &vvdNewColvarsPath);
 	void assignEnergies(vector2d &vvdGridList, vector2d &vvdFesList, vector2d &vvdNewColvarsPath);
 
@@ -110,14 +114,14 @@ private:
 	void calculateSpectralGap();
 	void determineSpectralGap();
 	int countBarriers(vector<double> &vdFes);
-	vector<double> smoothSurface(vector<double> &vdFes, bool bGaussian=false);
+	vector<double> smoothSurface(vector<double> &vdFes);
 
 	// Output functions
 	void printPath();
 	void logPathEnergies();
 
 	// Friend functions for output
-	friend void writeDataFile(std::string strFilename, vector<double> &vdData);
+	friend void writeDataFile(string strFilename, vector<double> &vdData);
 };
 
 void printLogLine(std::ofstream &Output, InputData &sInput, Path &cPath, vector<double> &vdCoefficients, int nInfCount);

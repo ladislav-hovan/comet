@@ -8,10 +8,13 @@
 
 int main(int argc, char *argv[]) 
 {
-	std::string strInputFile = loadCommandLineInput(argc, argv);
+	string strInputFile = loadCommandLineInput(argc, argv);
 
 	InputData sInput = loadInput(strInputFile);
 	checkInput(sInput);
+
+	std::cout.precision(sInput.nPrecision - 1);
+	std::cout << std::scientific;
 
 	std::cout << "Loading the new collective variables data for the proposed path... ";
 	vector2d vvdNewColvarDataPath = load2dDataFromFile(sInput.strNewColvarFilePath);
@@ -20,10 +23,7 @@ int main(int argc, char *argv[])
 
 	// Some vectors are created here but not filled unless needed
 	vector2d vvdNewColvars;
-	vector<double> vdSnapshotEnergies;
-	vector<double> vdSummedBias;
-	vector<double> vdEbetacList;
-	vector<double> vdScalings;
+	vector<double> vdSnapshotEnergies, vdSummedBias, vdEbetacList;
 
 	std::cout << "Loading the original metadynamics data... ";
 	vector2d vvdMetadColvarData = load2dDataFromFile(sInput.strMetadColvarFile);
@@ -36,23 +36,22 @@ int main(int argc, char *argv[])
 	// Make sure that the bias and new collective variables are aligned and have the same number of rows
 	alignRows(vvdMetadColvarData, vvdNewColvarData, sInput.nTimeColumn);
 
-	vdSummedBias = sumColumns(vvdMetadColvarData, sInput.vnBiasColumns);
+	vector<int> vnAllBiasColumns = sInput.vnBiasColumns;
+	vnAllBiasColumns.insert(vnAllBiasColumns.end(), sInput.vnRBiasColumns.begin(), sInput.vnRBiasColumns.end());
+	vdSummedBias = sumColumns(vvdMetadColvarData, vnAllBiasColumns);
 	vvdNewColvars = selectColumns(vvdNewColvarData, sInput.vnNewColumns, sInput, false);
 
-	// Either get work estimates or take weights of the hills which incorporate them
-	if (sInput.nScalingColumn == -1)
+	// Calculate or load work estimates if rbias not included
+	if (sInput.vnRBiasColumns.empty())
 		vdEbetacList = loadEbetacList(sInput);
-	else
-	{
-		for (auto &row: vvdMetadColvarData)
-			vdScalings.push_back(row[sInput.nScalingColumn]);
-	}
 
+	vector2d vvdLimits;
 	if (sInput.bRescale)
 	{
 		std::cout << "Rescaling the collective variables... ";
 
 		// The order is important, otherwise path doesn't get rescaled
+		vvdLimits = getLimits(vvdNewColvars);
 		vvdNewColvarsPath = rescaleDataRange(vvdNewColvars, vvdNewColvarsPath, sInput, true);
 		vvdNewColvars = rescaleDataRange(vvdNewColvars, vvdNewColvars, sInput, false);
 
@@ -80,12 +79,14 @@ int main(int argc, char *argv[])
 		vvdCoefficientsList = createTestingList(sInput.vnNewColumns.size());
 		sInput.nAnnealingSteps = vvdCoefficientsList.size();
 		vdCoefficients = vvdCoefficientsList[0];
+		setSignificant(vdCoefficients, sInput.nPrecision);
 	}
 	else
 	{
 		if (sInput.strCoeffList.empty())
 		{
 			vdCoefficients = initialiseCoefficients(sInput.vnNewColumns.size());
+			setSignificant(vdCoefficients, sInput.nPrecision);
 
 			if (sInput.bConvertPeriodic)
 				vdPeriodicCoeffs = vector<double>(sInput.vnPeriodicColumns.size(), 0.0);
@@ -95,6 +96,7 @@ int main(int argc, char *argv[])
 			vvdCoefficientsList = load2dDataFromFile(sInput.strCoeffList);
 			sInput.nAnnealingSteps = vvdCoefficientsList.size();
 			vdCoefficients = vvdCoefficientsList[0];
+			setSignificant(vdCoefficients, sInput.nPrecision);
 
 			if (sInput.bConvertPeriodic)
 			{
@@ -102,11 +104,13 @@ int main(int argc, char *argv[])
 
 				if (vvdPerCoeffList.size() != vvdCoefficientsList.size())
 				{
-					std::cerr << "The numbers of coefficients and periodic coefficients provided don't match" << std::endl;
+					std::cerr << "The numbers of coefficients and periodic coefficients provided don't match"
+						<< std::endl;
 					exit (INVALID_INPUT);
 				}
 
 				vdPeriodicCoeffs = vvdPerCoeffList[0];
+				setSignificant(vdPeriodicCoeffs, sInput.nPrecision);
 			}
 		}
 	}
@@ -138,9 +142,9 @@ int main(int argc, char *argv[])
 
 		Solution sCurrent = sInput.bNoPath ?
 			tryCoefficients(vdCoefficients, vdPeriodicCoeffs, vdSummedBias, vvdNewColvars,
-				vdEbetacList, vdScalings, sInput, LogOutput) :
+				vdEbetacList, sInput, LogOutput) :
 			tryCoefficientsPath(vdCoefficients, vdPeriodicCoeffs, vdSummedBias, vvdNewColvars, 
-				vvdNewColvarsPath, vdEbetacList, vdScalings, sInput, LogOutput);
+				vvdNewColvarsPath, vdEbetacList, sInput, LogOutput);
 
 		if ((sCurrent.nViolations < sPrevious.nViolations) || ((sCurrent.nViolations == sPrevious.nViolations) &&
 			(Distribution(Mersenne) < exp((sCurrent.dSpectralGap - sPrevious.dSpectralGap) / sInput.dAnnealingkT))))
@@ -148,12 +152,7 @@ int main(int argc, char *argv[])
 			sPrevious = sCurrent;
 
 			if (sCurrent.dSpectralGap > sBest.dSpectralGap)
-			{
 				sBest = sCurrent;
-
-				if (fs::exists("dist_matrix.dat"))
-					fs::rename("dist_matrix.dat", "best_dist_matrix.dat");
-			}
 		}
 
 		// Log periodic coefficients if used
@@ -170,26 +169,42 @@ int main(int argc, char *argv[])
 		{
 			if (sInput.bRandom)
 			{
-				vdCoefficients = randomiseCoefficients(vdCoefficients.size(), Mersenne);
+				vdCoefficients = randomiseCoefficients(vdCoefficients.size(), Mersenne, sInput.vdLowerLimits, 
+					sInput.vdUpperLimits);
+				setSignificant(vdCoefficients, sInput.nPrecision);
 
 				if (sInput.bConvertPeriodic)
-					vdPeriodicCoeffs = randomisePeriodicCoefficients(vdPeriodicCoeffs.size(), Mersenne, sInput.vdPeriodicRanges);
+				{
+					vdPeriodicCoeffs = randomisePeriodicCoefficients(vdPeriodicCoeffs.size(), Mersenne,
+						sInput.vdPeriodicRanges);
+					setSignificant(vdPeriodicCoeffs, sInput.nPrecision);
+				}
 			}
 			else
 			{
-				vdCoefficients = perturbCoefficients(sPrevious.vdCoefficients, Mersenne);
+				vdCoefficients = perturbCoefficients(sPrevious.vdCoefficients, Mersenne, sInput.dPerturbationLimit, 
+					sInput.vdLowerLimits, sInput.vdUpperLimits);
+				setSignificant(vdCoefficients, sInput.nPrecision);
 
 				if (sInput.bConvertPeriodic)
-					vdPeriodicCoeffs = perturbPeriodicCoefficients(sPrevious.vdPeriodicCoeffs, Mersenne, sInput.vdPeriodicRanges);
+				{
+					vdPeriodicCoeffs = perturbPeriodicCoefficients(sPrevious.vdPeriodicCoeffs, Mersenne,
+						sInput.vdPeriodicRanges, sInput.dPerturbationLimit);
+					setSignificant(vdPeriodicCoeffs, sInput.nPrecision);
+				}
 			}
 		}
 		// Or load the next one from the list
 		else if (nStep < sInput.nAnnealingSteps)
 		{
 			vdCoefficients = vvdCoefficientsList[nStep];
+			setSignificant(vdCoefficients, sInput.nPrecision);
 
 			if (sInput.bConvertPeriodic)
+			{
 				vdPeriodicCoeffs = vvdPerCoeffList[nStep];
+				setSignificant(vdPeriodicCoeffs, sInput.nPrecision);
+			}
 		}
 	}
 
@@ -216,13 +231,92 @@ int main(int argc, char *argv[])
 
 	std::cout << "Infinities in reweighted FES: " << sBest.nInfinities << std::endl;
 
-	if (sInput.bConvertPeriodic)
+	if (!sInput.bNoPath)
 	{
-		vector2d vvdConvertedPath = convertPeriodic(vvdNewColvarsPath, sBest.vdPeriodicCoeffs, sInput);
-		createColvarFile(vvdConvertedPath, sBest.vnSnapshots);
+		// Create a file detailing path progression
+		vector<double> vdFirst, vdSecond;
+		vdFirst.reserve(vvdNewColvarsPath.size());
+
+		if (sInput.dZLimit >= 0.0 || sInput.bPath2D)
+			vdSecond.reserve(vvdNewColvarsPath.size());
+
+		pvd pvdPathValues(vdFirst, vdSecond);
+		vector2d vvdConvertedPath;
+
+		if (sInput.bConvertPeriodic)
+		{
+			vvdConvertedPath = convertPeriodic(vvdNewColvarsPath, sBest.vdPeriodicCoeffs, sInput);
+
+			calculatePath(vvdConvertedPath, vvdConvertedPath, sBest.vdCoefficients, sBest.vnSnapshots, sBest.dLambda, 
+				sInput, pvdPathValues);
+		}
+		else
+			calculatePath(vvdNewColvarsPath, vvdNewColvarsPath, sBest.vdCoefficients, sBest.vnSnapshots, sBest.dLambda,
+				sInput, pvdPathValues);
+
+		backupFile("s_progression.dat");
+		writeDataFile("s_progression.dat", pvdPathValues.first);
+
+		// Create a file with PCV values for the original simulation
+		pvdPathValues.first.clear();
+		pvdPathValues.first.reserve(vvdNewColvars.size());
+		pvdPathValues.second.clear();
+		pvdPathValues.second.reserve(vvdNewColvars.size());
+
+		sInput.bPath2D = true;
+		vector2d vvdConverted;
+
+		if (sInput.bConvertPeriodic)
+		{
+			vvdConverted = convertPeriodic(vvdNewColvars, sBest.vdPeriodicCoeffs, sInput);
+
+			calculatePath(vvdConvertedPath, vvdConverted, sBest.vdCoefficients, sBest.vnSnapshots, sBest.dLambda,
+				sInput, pvdPathValues);
+		}
+		else
+			calculatePath(vvdNewColvarsPath, vvdNewColvars, sBest.vdCoefficients, sBest.vnSnapshots, sBest.dLambda,
+				sInput, pvdPathValues);
+
+		vector2d vvdPathValues;
+		for (int nPos = 0; nPos < vvdNewColvars.size(); ++nPos)
+			vvdPathValues.push_back({ pvdPathValues.first[nPos], pvdPathValues.second[nPos] });
+
+		backupFile("pcv_values.dat");
+		writeDataFile("pcv_values.dat", vvdPathValues);
+
+		// Create a Colvar file
+		if (sInput.bDescale)
+		{
+			vvdNewColvarDataPath = load2dDataFromFile(sInput.strNewColvarFilePath);
+			vvdNewColvarsPath = selectColumns(vvdNewColvarDataPath, sInput.vnNewColumnsPath, sInput, true);
+
+			if (sInput.bConvertPeriodic)
+			{
+				vdPeriodicCoeffs = sBest.vdPeriodicCoeffs;
+
+				for (int nCV = 0; nCV < sBest.vdCoefficients.size(); ++nCV)
+					vdPeriodicCoeffs[nCV] *= (vvdLimits[1][nCV] - vvdLimits[0][nCV]);
+
+				vector2d vvdConvertedPath = convertPeriodic(vvdNewColvarsPath, vdPeriodicCoeffs, sInput);
+				createColvarFile(vvdConvertedPath, sBest.vnSnapshots, sInput.nPrecision);
+			}
+			else
+				createColvarFile(vvdNewColvarsPath, sBest.vnSnapshots, sInput.nPrecision);
+		}
+		else
+		{
+			if (sInput.bConvertPeriodic)
+			{
+				vector2d vvdConvertedPath = convertPeriodic(vvdNewColvarsPath, sBest.vdPeriodicCoeffs, sInput);
+				createColvarFile(vvdConvertedPath, sBest.vnSnapshots, sInput.nPrecision);
+			}
+			else
+				createColvarFile(vvdNewColvarsPath, sBest.vnSnapshots, sInput.nPrecision);
+		}
 	}
-	else
-		createColvarFile(vvdNewColvarsPath, sBest.vnSnapshots);
+	
+	// Create a Plumed file
+	createPlumedFile(sBest, vvdLimits, sInput);
 
 	return NO_ERROR;
 }

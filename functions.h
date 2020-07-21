@@ -19,23 +19,12 @@
 #include "input.h"
 #include "output.h"
 #include "path.h"
+#include "solution.h"
 
 using std::vector;
 using vector2d = vector< vector<double> >;
 using pvd = std::pair<vector<double>, vector<double>>;
 const double dPi = 3.1415926535;
-
-struct Solution 
-{
-	vector<double> vdCoefficients;
-	vector<double> vdPeriodicCoeffs;
-	vector<int> vnSnapshots;
-	int nInfinities = -1;
-	int nBarriers = -1;
-	int nViolations = std::numeric_limits<int>::infinity();
-	double dSpectralGap = -1.0;
-	double dLambda = 0.0;
-};
 
 // Basic math
 unsigned int power(unsigned int nBase, unsigned int nExponent);
@@ -58,34 +47,35 @@ std::pair<vector2d, vector<double>> reweightFes(vector<double> &vdBias, vector2d
 	vector2d &vvdNewColvarsPath, vector<double> &vdEbetacList, InputData &sInput);
 
 // Reweighting with calculation of new variable values
-int examineNewColvars(vector< vector<double> > &vvdNewColvars, vector<double> &vdCoefficients,
+int examineNewColvars(vector2d &vvdNewColvars, vector<double> &vdCoefficients,
 	std::pair<double, double> &pdNewGridLimits, int nColvars);
 vector<double> createNewGrid(std::pair<double, double> pdNewGridLimits, int nGrid);
-vector<double> calculateNewFes(vector<double> &vdBias, vector< vector<double> > &vvdNewColvars, 
-	vector<double> &vdCoefficients, vector<double> &vdNewGrid, vector<double> &vdEbetacList, vector<double> &vdScalings, 
-	InputData &sInput, int nRows);
+vector<double> calculateNewFes(vector<double> &vdBias, vector2d &vvdNewColvars, vector<double> &vdCoefficients, 
+	vector<double> &vdNewGrid, vector<double> &vdEbetacList, InputData &sInput, int nRows);
 std::pair<vector<double>, vector<double>> reweightFes(vector<double> &vdBias, vector2d &vvdNewColvars, 
-	vector<double> &vdCoefficients, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput);
+	vector<double> &vdCoefficients, vector<double> &vdEbetacList, InputData &sInput);
 
 // Reweighting without calculation of new variable values but with limiting values (used for Path)
 int examineNewColvars(vector<double> &vdNewColvar, std::pair<double, double> &pdNewGridLimits);
 vector<double> calculateNewFes(vector<double> &vdBias, vector<double> &vdNewColvar, vector<double> &vdLimits,
-	vector<double> &vdNewGrid, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput, int nRows);
+	vector<double> &vdNewGrid, vector<double> &vdEbetacList, InputData &sInput, int nRows);
 std::pair<vector<double>, vector<double>> reweightFes(vector<double> &vdBias, vector<double> &vdNewColvar, 
-	vector<double> &vdLimits, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput);
+	vector<double> &vdLimits, vector<double> &vdEbetacList, InputData &sInput);
 // END OF THE SECTION
 
 // Initialisation and manipulation of coefficients vectors
 vector<double> initialiseCoefficients(int nColvars);
 void normaliseCoefficients(vector<double> &vdCoefficients);
-vector<double> perturbCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne);
+vector<double> perturbCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne, double dValue, 
+	vector<double>& vdLowerLimits, vector<double>& vdUpperLimits);
 vector<double> perturbPeriodicCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne, 
-	vector<double> &vdPeriodicRanges);
-vector<double> randomiseCoefficients(int nNumber, std::mt19937 &Mersenne);
+	vector<double> &vdPeriodicRanges, double dValue);
+vector<double> randomiseCoefficients(int nNumber, std::mt19937 &Mersenne, vector<double>& vdLowerLimits, 
+	vector<double>& vdUpperLimits);
 vector<double> randomisePeriodicCoefficients(int nNumber, std::mt19937 &Mersenne, vector<double> &vdPeriodicRanges);
 
 // Replacement of infinities in the free energy surface
-int correctInfinities(vector<double> &vdNewFes, bool bAltInfinity);
+int correctInfinities(vector<double> &vdNewFes, bool bAltInfinity, bool bVerbose);
 void replaceInfinities(vector<double> &vdNewFes);
 void interpolateInfinities(vector<double> &vdNewFes);
 
@@ -95,18 +85,17 @@ void decreasekT(InputData &sInput);
 void setMinToZero(vector<double> &vdEnergies);
 
 // Path collective variable calculation
-void calculatePath(vector2d &vvdNewColvarsPath, vector2d &vvdNewColvars, vector<double> vdCoefficients, 
-	vector<int> vnSnapshots, double dLambda, InputData &sInput, pvd &pvdPathValues);
+void calculatePath(vector2d &vvdNewColvarsPath, vector2d &vvdNewColvars, vector<double> &vdCoefficients, 
+	vector<int> &vnSnapshots, double dLambda, InputData &sInput, pvd &pvdPathValues);
 
 // Master functions and logging
 void optimiseAndLog(Path &cPath, std::ofstream &LogOutput, Solution &sCurrent, InputData &sInput);
 Solution stopTrying(Solution &sCurrent, double dLambda, Path &cPath1, vector<int> &vnSnapshots, 
 	vector<double> &vdCoefficients, int nCountInfs, double dBestEnergy, std::ofstream &LogOutput);
 Solution tryCoefficients(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, vector<double> &vdSummedBias,
-	vector2d &vvdNewColvars, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput, 
-	std::ofstream &LogOutput);
-Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, vector<double> &vdSummedBias,
-	vector2d &vvdNewColvars, vector2d &vvdNewColvarsPath, vector<double> &vdEbetacList, vector<double> &vdScalings, 
+	vector2d &vvdNewColvars, vector<double> &vdEbetacList, InputData &sInput, std::ofstream &LogOutput);
+Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, 
+	vector<double> &vdSummedBias, vector2d &vvdNewColvars, vector2d &vvdNewColvarsPath, vector<double> &vdEbetacList, 
 	InputData &sInput, std::ofstream &LogOutput);
 
 #endif /* FUNCTIONS_H_ */

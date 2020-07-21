@@ -12,13 +12,19 @@
 #include <cstring>
 #include <cctype>
 #include <iostream>
+#include <cmath>
 #include "input_data.h"
 #include "error_codes.h"
 
-bool isEmpty(std::string strInput);
-void handleSeparated(vector<int> &vnSequence, bool &bRange, std::string &strMember, int nRangeStart);
-vector<int> separateString(std::string strSequence);
-vector<double> separateStringDoubles(std::string strSequence);
-std::string trimWhitespace(std::string strInput);
+using std::string;
+
+bool isEmpty(string strInput);
+void handleSeparated(vector<int> &vnSequence, bool &bRange, string &strMember, int nRangeStart);
+vector<int> separateString(string strSequence);
+vector<double> separateStringDoubles(string strSequence);
+string trimWhitespace(string strInput);
+double setDecimal(double dValue, int nFigures);
+double setSignificant(double dValue, int nFigures);
+void setSignificant(vector<double>& vdValues, int nFigures);
 
 #endif /* SMALL_TOOLS_H_ */

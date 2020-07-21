@@ -14,7 +14,8 @@
 #include <random>
 #include <cmath>
 #include <ctime>
-#include <experimental/filesystem>
+//#include <experimental/filesystem>
+#include <filesystem>
 #include "input.h"
 #include "auxiliary.h"
 #include "output.h"
@@ -25,6 +26,7 @@
 #include "testing.h"
 
 using std::vector;
-typedef vector< vector<double> > vector2d;
+using std::string;
+using vector2d = vector< vector<double> >;
 
 #endif /* MAIN_H_ */

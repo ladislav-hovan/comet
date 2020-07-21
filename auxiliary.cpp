@@ -7,7 +7,8 @@
 
 #include "auxiliary.h"
 
-vector<double> sumColumns(vector2d &vvdData, vector<int> &vnColumns) {
+vector<double> sumColumns(vector2d &vvdData, vector<int> &vnColumns) 
+{
 	vector<double> vdSummedData;
 
 	for (unsigned int nRow = 0; nRow < vvdData.size(); ++nRow)
@@ -25,7 +26,8 @@ vector<double> sumColumns(vector2d &vvdData, vector<int> &vnColumns) {
 	return vdSummedData;
 }
 
-vector<double> sumColumns(vector2d &vvdData) {
+vector<double> sumColumns(vector2d &vvdData) 
+{
 	vector<double> vdSummedData;
 
 	for (unsigned int nRow = 0; nRow < vvdData.size(); ++nRow)
@@ -43,18 +45,32 @@ vector<double> sumColumns(vector2d &vvdData) {
 	return vdSummedData;
 }
 
-vector2d selectColumns(vector2d &vvdData, vector<int> &vnColumns, InputData &sInput, bool bPath) {
+vector2d selectColumns(vector2d &vvdData, vector<int> &vnColumns, InputData &sInput, bool bPath) 
+{
 	vector2d vvdSelectedData;
 
 	static bool bScaled = false;
 	static bool bScaledPath = false;
+
+	if (bPath && !bScaledPath)
+	{
+		for (auto &nCol : sInput.vnPeriodicColumnsPath)
+			nCol = static_cast<int>(std::find(vnColumns.begin(), vnColumns.end(), nCol) - vnColumns.begin());
+		bScaledPath = true;
+	}
+	else if (!bScaled)
+	{
+		for (auto &nCol : sInput.vnPeriodicColumns)
+			nCol = static_cast<int>(std::find(vnColumns.begin(), vnColumns.end(), nCol) - vnColumns.begin());
+		bScaled = true;
+	}
 
 	for (unsigned int nRow = 0; nRow < vvdData.size(); ++nRow)
 	{
 		vector<double> vdSelection;
 
 		unsigned int nNext = 0;
-		for (int nColumn = 0; nColumn < vvdData.at(nRow).size(); ++nColumn)
+		for (unsigned nColumn = 0; nColumn < vvdData.at(nRow).size(); ++nColumn)
 		{
 			if (nColumn == vnColumns.at(nNext))
 			{
@@ -64,44 +80,18 @@ vector2d selectColumns(vector2d &vvdData, vector<int> &vnColumns, InputData &sIn
 				else
 					break;
 			}
-			else if (nRow == 0)
-			{
-				if (bPath && !bScaledPath)
-				{
-					for (auto &nCol: sInput.vnPeriodicColumnsPath)
-						if (nCol >= nColumn)
-							--nCol;
-				}
-				else if (!bScaled)
-				{
-					for (auto &nCol: sInput.vnPeriodicColumns)
-						if (nCol >= nColumn)
-							--nCol;
-				}
-			}
 		}
 
 		vvdSelectedData.push_back(vdSelection);
 	}
 
-	if (bPath)
-		bScaledPath = true;
-	else
-		bScaled = true;
-
 	return vvdSelectedData;
 }
 
-vector2d rescaleDataRange(vector2d &vvdDataLimits, vector2d &vvdDataToScale, InputData &sInput, bool bPath) {
-	vector2d vvdScaledData;
-
-	if (vvdDataLimits.at(0).size() != vvdDataToScale.at(0).size())
-	{
-		std::cerr << "The number of columns in the files for rescaling does not match" << std::endl;
-		exit (SIZE_NOT_MATCHED);
-	}
-
+vector2d getLimits(vector2d &vvdDataLimits)
+{
 	vector2d vvdLimits;
+
 	for (unsigned int nRow = 0; nRow < vvdDataLimits.size(); ++nRow)
 	{
 		if (vvdLimits.empty())
@@ -128,6 +118,21 @@ vector2d rescaleDataRange(vector2d &vvdDataLimits, vector2d &vvdDataToScale, Inp
 			}
 		}
 	}
+
+	return vvdLimits;
+}
+
+vector2d rescaleDataRange(vector2d &vvdDataLimits, vector2d &vvdDataToScale, InputData &sInput, bool bPath) 
+{
+	vector2d vvdScaledData;
+
+	if (vvdDataLimits.at(0).size() != vvdDataToScale.at(0).size())
+	{
+		std::cerr << "The number of columns in the files for rescaling does not match" << std::endl;
+		exit (SIZE_NOT_MATCHED);
+	}
+
+	vector2d vvdLimits = getLimits(vvdDataLimits);
 
 	vector<double> vdFactors;
 	for (unsigned int nColumn = 0; nColumn < vvdLimits.at(0).size(); ++nColumn)
@@ -163,7 +168,8 @@ vector2d rescaleDataRange(vector2d &vvdDataLimits, vector2d &vvdDataToScale, Inp
 	return vvdScaledData;
 }
 
-vector2d createTestingList(int nCoefficients) {
+vector2d createTestingList(int nCoefficients) 
+{
 	vector2d vvdTestingList;
 
 	for (int nRow = 0; nRow < nCoefficients; ++nRow)

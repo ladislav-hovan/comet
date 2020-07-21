@@ -24,6 +24,8 @@ Path::Path(vector<double> &vdFes, InputData &sInput, double dBestEnergy)
 	m_dkT = sInput.dkT;
 	m_dThreshold = sInput.dThreshold * sInput.dkT;
 	m_bSmoothCount = sInput.bSmoothCount;
+	m_bVerbose = sInput.bVerbose;
+	m_dSmoothRatio = sInput.dSmoothRatio;
 	sBestPath.dEnergy = dBestEnergy;
 	initialiseSnapshots(m_nLengthTarget, false);
 }
@@ -57,9 +59,11 @@ Path::Path(vector<double> &vdCoefficients, InputData &sInput, vector2d &vvdNewCo
 	m_dThreshold = sInput.dThreshold * sInput.dkT;
 	m_bStrict = sInput.bStrictOrder;
 	m_bSmoothCount = sInput.bSmoothCount;
+	m_bVerbose = sInput.bVerbose;
+	m_dSmoothRatio = sInput.dSmoothRatio;
 	m_vdCoefficients = vdCoefficients;
 	setPeriodicity(sInput);
-	loadMatrix(vdCoefficients, vvdNewColvarsPath, sInput.bEuclidean);
+	loadMatrix(vdCoefficients, vvdNewColvarsPath);
 	initialiseSnapshots(m_nLengthTarget, false);  // optimise() will look at other lengths too
 }
 
@@ -79,7 +83,7 @@ void Path::initialiseSnapshots(unsigned int nSnapshots, bool bPrint)
 
 	m_vnSnapshots.push_back(m_nTotalSnapshots - 1);
 
-	if (bPrint)
+	if (bPrint && m_bVerbose)
 	{
 		std::cout << "Initial guess at a path: ";
 		printPath();
@@ -128,9 +132,10 @@ void Path::setPeriodicity(InputData &sInput)
 	}
 }
 
-void Path::loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPath, bool bEuclidean) 
+void Path::loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPath) 
 {
-	std::cout << "Loading a matrix of distance values... ";
+	if (m_bVerbose)
+		std::cout << "Loading a matrix of distance values... ";
 
 	int nSize = vvdNewColvarsPath.size();
 	vector<double> vdTempRow(nSize, 0.0);
@@ -150,41 +155,19 @@ void Path::loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPat
 			{
 				double dTempValue = 0.0;
 
-				if (bEuclidean)
+				for (unsigned int nColvar = 0; nColvar < vdCoefficients.size(); ++nColvar)
 				{
-					for (unsigned int nColvar = 0; nColvar < vdCoefficients.size(); ++nColvar)
+					double dDiff = vvdNewColvarsPath[nRow][nColvar] - vvdNewColvarsPath[nColumn][nColvar];
+
+					if (m_vdPeriodicRanges[nColvar] > 0)
 					{
-						double dDiff = vvdNewColvarsPath[nRow][nColvar] - vvdNewColvarsPath[nColumn][nColvar];
-
-						if (m_vdPeriodicRanges[nColvar] > 0)
-						{
-							if (dDiff > m_vdPeriodicRanges[nColvar] / 2)
-								dDiff -= m_vdPeriodicRanges[nColvar];
-							else if (dDiff < - m_vdPeriodicRanges[nColvar] / 2)
-								dDiff += m_vdPeriodicRanges[nColvar];
-						}
-
-						dTempValue += pow(vdCoefficients[nColvar] * dDiff, 2);
+						if (dDiff > m_vdPeriodicRanges[nColvar] / 2)
+							dDiff -= m_vdPeriodicRanges[nColvar];
+						else if (dDiff < - m_vdPeriodicRanges[nColvar] / 2)
+							dDiff += m_vdPeriodicRanges[nColvar];
 					}
 
-					dTempValue = sqrt(dTempValue);
-				}
-				else
-				{
-					for (unsigned int nColvar = 0; nColvar < vdCoefficients.size(); ++nColvar)
-					{
-						double dDiff = vvdNewColvarsPath[nRow][nColvar] - vvdNewColvarsPath[nColumn][nColvar];
-
-						if (m_vdPeriodicRanges[nColvar] > 0)
-						{
-							if (dDiff > m_vdPeriodicRanges[nColvar] / 2)
-								dDiff -= m_vdPeriodicRanges[nColvar];
-							else if (dDiff < - m_vdPeriodicRanges[nColvar] / 2)
-								dDiff += m_vdPeriodicRanges[nColvar];
-						}
-
-						dTempValue += fabs(vdCoefficients[nColvar] * dDiff);
-					}
+					dTempValue += pow(vdCoefficients[nColvar] * dDiff, 2);
 				}
 
 				m_vvdMatrix[nRow][nColumn] = dTempValue;
@@ -193,7 +176,8 @@ void Path::loadMatrix(vector<double> &vdCoefficients, vector2d &vvdNewColvarsPat
 		}
 	}
 
-	std::cout << "Done" << std::endl;
+	if (m_bVerbose)
+		std::cout << "Done" << std::endl;
 }
 
 void Path::assignEnergies(vector<double> &vdGrid, vector<double> &vdFes, vector2d &vvdNewColvarsPath) 
@@ -228,7 +212,7 @@ void Path::assignEnergies(vector<double> &vdGrid, vector<double> &vdFes, vector2
 		}
 	}
 
-	writeDataFile("reweighted_fes.dat", m_vdEnergies);
+	// writeDataFile("reweighted_fes.dat", m_vdEnergies);
 }
 
 void Path::assignEnergies(vector2d &vvdGridList, vector2d &vvdFesList, vector2d &vvdNewColvarsPath) 
@@ -272,14 +256,15 @@ void Path::assignEnergies(vector2d &vvdGridList, vector2d &vvdFesList, vector2d 
 		m_vdEnergies.push_back(dTotalValue);
 	}
 
-	writeDataFile("reweighted_fes.dat", m_vdEnergies);
+	// writeDataFile("reweighted_fes.dat", m_vdEnergies);
 }
 
 void Path::optimise() 
 {
 	for (unsigned int nLength = m_nLengthTarget - m_nLengthTolerance; nLength <= m_nLengthTarget + m_nLengthTolerance; ++nLength)
 	{
-		std::cout << ">>>\nTesting path of length " << nLength << std::endl;
+		if (m_bVerbose)
+			std::cout << ">>>\nTesting path of length " << nLength << std::endl;
 		initialiseSnapshots(nLength);
 		optimiseSetLength();
 
@@ -290,14 +275,15 @@ void Path::optimise()
 			(dEnergy < sBestPath.dEnergy && m_nViolations == sBestPath.nViolations))
 		{
 			sBestPath.vnSnapshots = m_vnSnapshots;
-			sBestPath.dLambda = 2.3 / pow(m_dFirstAverage, 2);
+			sBestPath.dLambda = 2.3 / m_dFirstAverage;
 			sBestPath.dEnergy = dEnergy;
 			sBestPath.nViolations = m_nViolations;
 		}
 	}
 
 	m_vnSnapshots = sBestPath.vnSnapshots;
-	std::cout << ">>>\nUsing " << m_vnSnapshots.size() << " snapshots" << std::endl;
+	if (m_bVerbose)
+		std::cout << ">>>\nUsing " << m_vnSnapshots.size() << " snapshots" << std::endl;
 }
 
 int Path::checkAllDistances() 
@@ -388,23 +374,33 @@ void Path::optimiseSetLength()
 		if (vnBackupSnapshots == m_vnSnapshots)
 		{
 			m_nViolations = nTotalViolations;
-			std::cout << "Deterministic minimisation yields no further improvement after " << nStep << " steps" << std::endl;
-			std::cout << "The final energy is " << getEnergy() << std::endl;
+			if (m_bVerbose)
+			{
+				std::cout << "Deterministic minimisation yields no further improvement after " << nStep << 
+					" steps" << std::endl;
+				std::cout << "The final energy is " << getEnergy() << std::endl;
+			}
 			return;
 		}
 		else
 		{
 			m_nViolations = nTotalViolations;
-			std::cout << "New best path: ";
-			printPath();
+			if (m_bVerbose)
+			{
+				std::cout << "New best path: ";
+				printPath();
 
-			if (m_bStrict) 
-				std::cout << "Violations: " << nTotalViolations << std::endl;
+				if (m_bStrict)
+					std::cout << "Violations: " << nTotalViolations << std::endl;
+			}
 		}
 	}
 
-	std::cout << "Deterministic minimisation has not converged after 100 steps, taking current result" << std::endl;
-	std::cout << "The final energy is " << getEnergy() << std::endl;
+	if (m_bVerbose)
+	{
+		std::cout << "Deterministic minimisation has not converged after 100 steps, taking current result" << std::endl;
+		std::cout << "The final energy is " << getEnergy() << std::endl;
+	}
 }
 
 double Path::getEnergy() 
@@ -458,7 +454,7 @@ double Path::getLambda()
 	{
 		initialiseOptimisationVars();
 
-		return 2.3 / pow(m_dFirstAverage, 2);
+		return 2.3 / m_dFirstAverage;
 	}
 	else
 		return sBestPath.dLambda;
@@ -491,7 +487,7 @@ vector<int> Path::getSnapshots()
 		return sBestPath.vnSnapshots;
 }
 
-void Path::saveDistances(std::string strFilename) 
+void Path::saveDistances(string strFilename) 
 {
 	vector2d vvdMatrix;
 
@@ -627,7 +623,7 @@ void Path::determineSpectralGap()
 		// Actually trying to count barriers higher than threshold
 		if (m_bSmoothCount)
 		{
-			vector<double> vdSmoothed = smoothSurface(m_vdEnergies, true);
+			vector<double> vdSmoothed = smoothSurface(m_vdEnergies);
 			m_nBarriers = countBarriers(vdSmoothed);
 		}
 		else
@@ -671,12 +667,14 @@ int Path::countBarriers(vector<double> &vdFes)
 			vnMinPositions.push_back(nPos);
 	}
 
-	printVector(vnMinPositions, true);
+	if (m_bVerbose)
+		printVector(vnMinPositions, true);
 
 	// Only one minimum (or possibly zero) - no barriers
 	if (vnMinPositions.size() <= 1)
 	{
-		std::cout << "Found no barriers!" << std::endl;
+		if (m_bVerbose)
+			std::cout << "Found no barriers!" << std::endl;
 		return 0;
 	}
 
@@ -695,7 +693,8 @@ int Path::countBarriers(vector<double> &vdFes)
 				dMax = vdFes[nPos];
 		}
 
-		if (((dMax - vdFes[vnMinPositions[nMin1]]) > m_dThreshold) && ((dMax - vdFes[vnMinPositions[nMin2]]) > m_dThreshold))
+		if (((dMax - vdFes[vnMinPositions[nMin1]]) > m_dThreshold) && 
+			((dMax - vdFes[vnMinPositions[nMin2]]) > m_dThreshold))
 		{
 			++nBarriers;
 			nMin1 = nMin2;
@@ -707,79 +706,42 @@ int Path::countBarriers(vector<double> &vdFes)
 	}
 	while (nMin2 < vnMinPositions.size());
 
-	if (nBarriers == 0)
-		std::cout << "Found no barriers!" << std::endl;
-	else if (nBarriers == 1)
-		std::cout << "Found 1 barrier!" << std::endl;
-	else
-		std::cout << "Found " << nBarriers << " barriers!" << std::endl;
+	if (m_bVerbose)
+	{
+		if (nBarriers == 0)
+			std::cout << "Found no barriers!" << std::endl;
+		else if (nBarriers == 1)
+			std::cout << "Found 1 barrier!" << std::endl;
+		else
+			std::cout << "Found " << nBarriers << " barriers!" << std::endl;
+	}
 
 	return nBarriers;
 }
 
-vector<double> Path::smoothSurface(vector<double> &vdFes, bool bGaussian) 
+vector<double> Path::smoothSurface(vector<double> &vdFes) 
 {
-	writeDataFile("rough_energies.dat", vdFes);
+	// writeDataFile("rough_energies.dat", vdFes);
 	vector<double> vdSmoothed;
+	
+	// Use gaussian kernel
+	double dStd = vdFes.size() * m_dSmoothRatio;
 
-	if (!bGaussian)
+	for (unsigned int nPos = 0; nPos < vdFes.size(); ++nPos)
 	{
-		// Use rolling average
-		int nWindow = vdFes.size() / 20;
-		int nIncluded = nWindow;
-		double dSum = 0.0;
+		double dNumerator = 0.0, dDenominator = 0.0;
 
-		if (nWindow == 0)
+		for (unsigned int nCount = 0; nCount < vdFes.size(); ++nCount)
 		{
-			std::cerr << "The number of points in the free energy surface is too small to use rolling average" << std::endl;
-			exit (INVALID_INPUT);
+			double dExp = exp(-pow((nPos - nCount) / dStd, 2) / 2);
+			dNumerator += dExp * vdFes[nCount];
+			dDenominator += dExp;
 		}
 
-		for (unsigned int nPos = 0; nPos < vdFes.size(); ++nPos)
-		{
-			if (nPos == 0)
-			{
-				for (int nCount = 0; nCount < nWindow; ++nCount)
-					dSum += vdFes[nCount];
-			}
-			else
-			{
-				if (nPos > nWindow)
-				{
-					dSum -= vdFes[nPos - nWindow - 1];
-					--nIncluded;
-				}
-				if (nPos + nWindow < vdFes.size())
-				{
-					dSum += vdFes[nPos + nWindow];
-					++nIncluded;
-				}
-			}
-
-			vdSmoothed.push_back(dSum / nIncluded);
-		}
-	}
-	else
-	{
-		// Use gaussian kernel
-		double dStd = vdFes.size() * 0.03;
-
-		for (unsigned int nPos = 0; nPos < vdFes.size(); ++nPos)
-		{
-			double dNumerator = 0.0, dDenominator = 0.0;
-
-			for (unsigned int nCount = 0; nCount < vdFes.size(); ++nCount)
-			{
-				double dExp = exp(-pow((nPos - nCount) / dStd, 2) / 2);
-				dNumerator += dExp * vdFes[nCount];
-				dDenominator += dExp;
-			}
-
-			vdSmoothed.push_back(dNumerator / dDenominator);
-		}
+		vdSmoothed.push_back(dNumerator / dDenominator);
 	}
 
-	writeDataFile("smoothed_energies.dat", vdSmoothed);
+	// writeDataFile("smoothed_energies.dat", vdSmoothed);
 
 	return vdSmoothed;
 }
@@ -804,7 +766,8 @@ void Path::populatekMatrix()
 		{
 			if (nColumn == nRow + 1)
 			{
-				double dValue = sqrt(exp(-(m_vdEnergies[m_vnSnapshots[nColumn]] - m_vdEnergies[m_vnSnapshots[nRow]]) / m_dkT));
+				double dValue = sqrt(exp(-(m_vdEnergies[m_vnSnapshots[nColumn]] - 
+					m_vdEnergies[m_vnSnapshots[nRow]]) / m_dkT));
 
 				m_kMatrix(nRow, nColumn) = dValue;
 				m_kMatrix(nColumn, nRow) = 1.0 / dValue;
@@ -826,6 +789,9 @@ void Path::populatekMatrix()
 
 void printLogLine(std::ofstream &Output, InputData &sInput, Path &cPath, vector<double> &vdCoefficients, int nInfCount) 
 {
+	Output.precision(sInput.nPrecision - 1);
+	Output << std::scientific;
+
 	if (sInput.bTryAll)
 	{
 		static int nColvar = 0;

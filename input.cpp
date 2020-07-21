@@ -7,9 +7,9 @@
 
 #include "input.h"
 
-std::string loadCommandLineInput(int argc, char *argv[]) 
+string loadCommandLineInput(int argc, char *argv[]) 
 {
-	std::string strInputFile;
+	string strInputFile;
 
 	if (argc < 2)
 		strInputFile = "parameters.input";
@@ -31,7 +31,7 @@ vector<double> loadFesFiles(InputData &sInput)
 	{
 		std::stringstream Stream;
 		Stream << sInput.strFesPrefix << nFile << ".dat";
-		std::string strFilename = Stream.str();
+		string strFilename = Stream.str();
 		double dEbetac = getEbetac(strFilename, sInput);
 		vdEbetacList.push_back(dEbetac);
 	}
@@ -42,14 +42,14 @@ vector<double> loadFesFiles(InputData &sInput)
 	return vdEbetacList;
 }
 
-double getEbetac(std::string strFilename, InputData &sInput) 
+double getEbetac(string strFilename, InputData &sInput) 
 {
-	vector< vector<double> > vvdFesData = load2dDataFromFile(strFilename);
+	vector2d vvdFesData = load2dDataFromFile(strFilename);
 	double dNumerator = 0.0, dDenominator = 0.0;
 
 	if (sInput.dGamma > 1e-6)  // Tempered
 	{
-		for (auto vdFesRow: vvdFesData)
+		for (auto &vdFesRow: vvdFesData)
 		{
 			double dExponent = - vdFesRow[sInput.nFreeEnergyColumn] / sInput.dkT;
 			dNumerator += exp(dExponent);
@@ -58,7 +58,7 @@ double getEbetac(std::string strFilename, InputData &sInput)
 	}
 	else  // Not tempered
 	{
-		for (auto vdFesRow: vvdFesData)
+		for (auto &vdFesRow: vvdFesData)
 			dNumerator += exp(- vdFesRow[sInput.nFreeEnergyColumn] / sInput.dkT);
 		dDenominator = static_cast<double>(vvdFesData.size());
 	}
@@ -121,13 +121,13 @@ void assignInput(string strLine, InputData &sInput)
 	if (!strFirstInput.compare("LengthTarget"))			sInput.nLengthTarget = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("LengthTolerance"))		sInput.nLengthTolerance = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("LogEigenvalues"))		sInput.nLogEigenvalues = std::stoi(strSecondInput);
-	if (!strFirstInput.compare("ScalingColumn"))		sInput.nScalingColumn = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("Seed"))					sInput.nSeed = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("TimeColumn"))			sInput.nTimeColumn = std::stoi(strSecondInput);
+	if (!strFirstInput.compare("MinBarriers"))			sInput.nMinBarriers = std::stoi(strSecondInput);
+	if (!strFirstInput.compare("Precision"))			sInput.nPrecision = std::stoi(strSecondInput);
 
 	// Assigning bools (via integers)
 	if (!strFirstInput.compare("AlternativeInfinity"))	sInput.bAltInfinity = std::stoi(strSecondInput);
-	if (!strFirstInput.compare("EuclideanDistance"))	sInput.bEuclidean = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("ConvertPeriodic"))		sInput.bConvertPeriodic = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("LimitIncorrect"))		sInput.bLimitIncorrect = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("LogPathEnergy"))		sInput.bLogEnergy = std::stoi(strSecondInput);
@@ -139,6 +139,8 @@ void assignInput(string strLine, InputData &sInput)
 	if (!strFirstInput.compare("SPath"))				sInput.bSPath = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("StrictOrder"))			sInput.bStrictOrder = std::stoi(strSecondInput);
 	if (!strFirstInput.compare("TryAll"))				sInput.bTryAll = std::stoi(strSecondInput);
+	if (!strFirstInput.compare("Verbose"))				sInput.bVerbose = std::stoi(strSecondInput);
+	if (!strFirstInput.compare("Descale"))				sInput.bDescale = std::stoi(strSecondInput);
 
 	// Assigning doubles
 	if (!strFirstInput.compare("AnnealingkT"))			sInput.dAnnealingkT = std::stod(strSecondInput);
@@ -148,9 +150,12 @@ void assignInput(string strLine, InputData &sInput)
 	if (!strFirstInput.compare("kT"))					sInput.dkT = std::stod(strSecondInput);
 	if (!strFirstInput.compare("Threshold"))			sInput.dThreshold = std::stod(strSecondInput);
 	if (!strFirstInput.compare("ZLimit"))				sInput.dZLimit = std::stod(strSecondInput);
+	if (!strFirstInput.compare("PerturbationLimit"))	sInput.dPerturbationLimit = std::stod(strSecondInput);
+	if (!strFirstInput.compare("SmoothRatio"))			sInput.dSmoothRatio = std::stod(strSecondInput);
 	
 	// Assigning vectors of integers
 	if (!strFirstInput.compare("BiasColumns"))			sInput.vnBiasColumns = separateString(strSecondInput);
+	if (!strFirstInput.compare("RBiasColumns"))			sInput.vnRBiasColumns = separateString(strSecondInput);
 	if (!strFirstInput.compare("NewColumns"))			sInput.vnNewColumns = separateString(strSecondInput);
 	if (!strFirstInput.compare("NewColumnsPath"))		sInput.vnNewColumnsPath = separateString(strSecondInput);
 	if (!strFirstInput.compare("PeriodicColumns"))		sInput.vnPeriodicColumns = separateString(strSecondInput);
@@ -158,6 +163,8 @@ void assignInput(string strLine, InputData &sInput)
 
 	// Assigning vectors of doubles
 	if (!strFirstInput.compare("PeriodicRange"))		sInput.vdPeriodicRanges = separateStringDoubles(strSecondInput);
+	if (!strFirstInput.compare("LowerLimits"))			sInput.vdLowerLimits = separateStringDoubles(strSecondInput);
+	if (!strFirstInput.compare("UpperLimits"))			sInput.vdUpperLimits = separateStringDoubles(strSecondInput);
 }
 
 void checkInput(InputData &sInput) 
@@ -167,17 +174,12 @@ void checkInput(InputData &sInput)
 	// Check input files
     if (sInput.strMetadColvarFile.empty())
     {
-        std::cerr << "Both complete FES file and metadynamics Colvar file are unspecified, please specify one" << std::endl;
+        std::cerr << "Metadynamics Colvar file is unspecified, please specify one" << std::endl;
         bError = true;
     }
     if (sInput.strNewColvarFile.empty())
     {
-        std::cerr << "Both complete FES file and new Colvar file are unspecified, please specify one" << std::endl;
-        bError = true;
-    }
-    if (!sInput.strFesPrefix.empty() && !sInput.strFesDataFile.empty())
-    {
-        std::cerr << "Both FES prefix and FES data file have been specified, pick just one" << std::endl;
+        std::cerr << "New Colvar file is unspecified, please specify one" << std::endl;
         bError = true;
     }
 	if (sInput.strNewColvarFilePath.empty())
@@ -185,10 +187,18 @@ void checkInput(InputData &sInput)
 		std::cerr << "New Colvar file for path is unspecified, please specify one" << std::endl;
 		bError = true;
 	}
-	if (sInput.strFesPrefix.empty() && sInput.strFesDataFile.empty())
+	if (sInput.vnRBiasColumns.empty())
 	{
-		std::cerr << "Both FES data file and FES prefix are unspecified, please specify one of them" << std::endl;
-		bError = true;
+		if (!sInput.strFesPrefix.empty() && !sInput.strFesDataFile.empty())
+		{
+			std::cerr << "Both FES prefix and FES data file have been specified, pick just one" << std::endl;
+			bError = true;
+		}
+		if (sInput.strFesPrefix.empty() && sInput.strFesDataFile.empty())
+		{
+			std::cerr << "Both FES data file and FES prefix are unspecified, please specify one of them" << std::endl;
+			bError = true;
+		}
 	}
 	if (!sInput.strCoeffList.empty() && sInput.bConvertPeriodic && sInput.strPeriodicCoeffList.empty())
 	{
@@ -197,9 +207,9 @@ void checkInput(InputData &sInput)
 	}
 
 	// Check vectors
-	if (sInput.vnBiasColumns.empty())
+	if (sInput.vnBiasColumns.empty() && sInput.vnRBiasColumns.empty())
 	{
-		std::cerr << "No bias columns have been specified, please specify at least one" << std::endl;
+		std::cerr << "No bias or rbias columns have been specified, please specify at least one" << std::endl;
 		bError = true;
 	}
 	if (sInput.vnNewColumns.empty())
@@ -225,6 +235,16 @@ void checkInput(InputData &sInput)
 	if (sInput.vnNewColumnsPath.size() != sInput.vnNewColumns.size())
 	{
 		std::cerr << "The number of collective variables for the path and metadynamics must be the same" << std::endl;
+		bError = true;
+	}
+	if (!sInput.vdLowerLimits.empty() && sInput.vdLowerLimits.size() != sInput.vnNewColumns.size())
+	{
+		std::cerr << "The number of lower limits has to match the number of collective variables" << std::endl;
+		bError = true;
+	}
+	if (!sInput.vdUpperLimits.empty() && sInput.vdUpperLimits.size() != sInput.vnNewColumns.size())
+	{
+		std::cerr << "The number of upper limits has to match the number of collective variables" << std::endl;
 		bError = true;
 	}
 
@@ -264,6 +284,11 @@ void checkInput(InputData &sInput)
 		std::cerr << "The number of annealing steps is not specified or invalid, please specify it" << std::endl;
 		bError = true;
 	}
+	if (sInput.nBarriers >= 0 && sInput.nMinBarriers > sInput.nBarriers)
+	{
+		std::cout << "The minimum number of barriers is lower than the set number, setting it to zero" << std::endl;
+		sInput.nMinBarriers = 0;
+	}
 
 	// Check all the other doubles
 	if (sInput.dkT < 0.0)
@@ -277,11 +302,29 @@ void checkInput(InputData &sInput)
 		bError = true;
 	}
 
+	// Handle the convert periodic directive if nothing to convert
+	if (sInput.bConvertPeriodic && sInput.vnPeriodicColumns.size() == 0)
+	{
+		std::cout << "Periodic conversion specified but no periodic variables, turning it off" << std::endl;
+		sInput.bConvertPeriodic = true;
+	}
+	// Handle the descale flag if rescale not set
+	if (!sInput.bRescale && sInput.bDescale)
+	{
+		std::cout << "Descale makes no sense without rescale, setting it to false" << std::endl;
+		sInput.bDescale = false;
+	}
+	// Populate limit vectors if empty
+	if (sInput.vdLowerLimits.empty())
+		sInput.vdLowerLimits.resize(sInput.vnNewColumns.size(), 0.0);
+	if (sInput.vdUpperLimits.empty())
+		sInput.vdUpperLimits.resize(sInput.vnNewColumns.size(), 1.0);
+
 	if (bError)
 		exit (INVALID_INPUT);
 }
 
-InputData loadInput(std::string strInputFile) 
+InputData loadInput(string strInputFile) 
 {
 	InputData sInput;
 
@@ -295,7 +338,7 @@ InputData loadInput(std::string strInputFile)
 
 	while (InputStream)
 	{
-		std::string strLine;
+		string strLine;
 		getline(InputStream, strLine);
 
 		// Ignore comment or empty lines
@@ -304,7 +347,7 @@ InputData loadInput(std::string strInputFile)
 
 		// Remove everything after #
 		size_t nPos = strLine.find_first_of('#');
-		if (nPos != std::string::npos)
+		if (nPos != string::npos)
 			strLine.erase(nPos);
 
 		assignInput(strLine, sInput);
@@ -313,7 +356,7 @@ InputData loadInput(std::string strInputFile)
 	return sInput;
 }
 
-vector<double> load1dDataFromFile(std::string strFilename) 
+vector<double> load1dDataFromFile(string strFilename) 
 {
 	vector<double> vdData;
 
@@ -327,7 +370,7 @@ vector<double> load1dDataFromFile(std::string strFilename)
 
 	while (InputStream)
 	{
-		std::string strLine;
+		string strLine;
 		getline(InputStream, strLine);
 		// Ignore comment or empty lines
 		if (!std::strncmp(strLine.c_str(), "#", 1) || isEmpty(strLine)) 
@@ -340,9 +383,9 @@ vector<double> load1dDataFromFile(std::string strFilename)
 	return vdData;
 }
 
-vector< vector<double> > load2dDataFromFile(std::string strFilename) 
+vector2d load2dDataFromFile(string strFilename) 
 {
-	vector< vector<double> > vvdData;
+	vector2d vvdData;
 
 	std::ifstream InputStream(strFilename);
 
@@ -354,7 +397,7 @@ vector< vector<double> > load2dDataFromFile(std::string strFilename)
 
 	while (InputStream)
 	{
-		std::string strLine;
+		string strLine;
 		getline(InputStream, strLine);
 		// Ignore comment or empty lines
 		if (!std::strncmp(strLine.c_str(), "#", 1) || isEmpty(strLine)) 
@@ -366,7 +409,7 @@ vector< vector<double> > load2dDataFromFile(std::string strFilename)
 		vector<double> vdDataLine;
 		while (!StringStream.eof())
 		{
-			std::string strValue;
+			string strValue;
 			StringStream >> strValue;
 
 			if (!strValue.empty())

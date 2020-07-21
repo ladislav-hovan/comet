@@ -46,7 +46,7 @@ double getGridPointEnergy(vector2d &vvdFesCompleteData, vector<int> &vnLowerPosi
 
 	for (unsigned int nCount = 1; nCount < vvdColvarGrid.size(); ++nCount)
 	{
-		nToMultiply *= vvdColvarGrid[nCount - 1].size();
+		nToMultiply *= static_cast<int>(vvdColvarGrid[nCount - 1].size());
 		nRow += vnPositions[nCount] * nToMultiply;
 	}
 
@@ -66,17 +66,17 @@ vector<int> getGridPointLower(vector2d &vvdColvarGrid, vector<double> &vdSpacing
 	return vnLowerElements;
 }
 
-vector<double> assignSnapshotEnergies(vector2d &vvdFesCompleteData, const vector<int> &vnColvarColumns, int nFreeEnergyColumnComplete,
-									  vector2d &vvdColvarPathData) 
+vector<double> assignSnapshotEnergies(vector2d &vvdFesCompleteData, const vector<int> &vnColvarColumns, 
+	int nFreeEnergyColumnComplete, vector2d &vvdColvarPathData) 
 {
 	// Determine grid values for every CV from the FES
 	// Use set, so they don't repeat
-	unsigned int nMax = vnColvarColumns.size();
+	unsigned nMax = vnColvarColumns.size();
 	vector<std::set<double>> vsColvarGrid(nMax);
 
 	for (auto vdFesRow: vvdFesCompleteData)
 	{
-		for (unsigned int nColumn = 0; nColumn < nMax; ++nColumn)
+		for (unsigned nColumn = 0; nColumn < nMax; ++nColumn)
 		{
 			double dColvarValue = vdFesRow[vnColvarColumns[nColumn]];
 			vsColvarGrid[nColumn].insert(dColvarValue);
@@ -112,7 +112,7 @@ vector<double> assignSnapshotEnergies(vector2d &vvdFesCompleteData, const vector
 			double dContribution = getGridPointEnergy(vvdFesCompleteData, vnLowerPositions, vbUpper, vvdColvarGrid,
 				nFreeEnergyColumnComplete);
 
-			for (unsigned int nCount = 0; nCount < vbUpper.size(); ++nCount)
+			for (unsigned nCount = 0; nCount < vbUpper.size(); ++nCount)
 			{
 				if (vbUpper[nCount])
 					dContribution *= (vvdColvarGrid[nCount][vnLowerPositions[nCount] + 1] - vdColvarDataRow[nCount]);
@@ -320,14 +320,15 @@ std::pair<vector2d, vector<double>> reweightFes(vector<double> &vdBias, vector2d
 	vector<int> vnGridPoints(2, sInput.nGrid);
 	vector2d vvdNewGrid = createNewGrid(vvdNewGridLimits, vnGridPoints);
 
-	vector<double> vdFes = calculateNewFes(vdBias, vvdNewColvars, vvdNewGrid, vdEbetacList, vnGridPoints, sInput.dkT, sInput.nFesFilesCount);
+	vector<double> vdFes = calculateNewFes(vdBias, vvdNewColvars, vvdNewGrid, vdEbetacList, vnGridPoints, sInput.dkT, 
+		sInput.nFesFilesCount);
 
 	return std::pair<vector2d, vector<double>> (vvdNewGrid, vdFes);
 }
 // End of 2D functions
 
 vector<double> calculateNewFes(vector<double> &vdBias, vector2d &vvdNewColvars, vector<double> &vdCoefficients,
-	vector<double> &vdNewGrid, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput, int nRows) 
+	vector<double> &vdNewGrid, vector<double> &vdEbetacList, InputData &sInput, int nRows) 
 {
 	int nGrid = sInput.nGrid;
 	int nColvars = sInput.vnNewColumns.size();
@@ -342,51 +343,36 @@ vector<double> calculateNewFes(vector<double> &vdBias, vector2d &vvdNewColvars, 
 
     for (int nRow = 0; nRow < nRows; ++nRow)
     {
-    	double dBias = vdBias[nRow];
         vector<double> *p_vdColvarRow = &(vvdNewColvars[nRow]);
         double dTotalValue = 0.0;
 
         for (int nColumn = 0; nColumn < nColvars; ++nColumn)
         	dTotalValue += (*p_vdColvarRow)[nColumn] * vdCoefficients[nColumn];
 
-		// Using the work estimates
-		if (vdScalings.empty())
+		double dKernelSum = 0.0;
+		double dExpBias = exp(vdBias[nRow] / dkT);
+
+		if (sInput.vnRBiasColumns.empty())
 		{
-			int nLocation = 0;
-
-			for (int nPos = 0; nPos < nGrid; ++nPos)
-			{
-				double dDiff = fabs(vdNewGrid[nPos] - dTotalValue);
-
-				if (dDiff < dCutoff)
-				{
-					nLocation = nPos;
-					break;
-				}
-			}
-
+			// Use estimates instead of rbias (which already includes the c(t))
 			int nIndex = int(ceil(float(nRow + 1) * dRatio)) - 1;
-
-			double dExpBias = exp(dBias / dkT) / vdEbetacList[nIndex];
-			vdFes[nLocation] += dExpBias;
-			dDenom += dExpBias;
+			dExpBias /= vdEbetacList[nIndex];
 		}
-		// Using the weights to create a weighted histogram
-		else
+
+		vector<double> vdKernels;
+
+		for (int nPos = 0; nPos < nGrid; ++nPos)
 		{
-			double dOverflow = 0.5 * (1 + std::erf((dTotalValue - vdNewGrid[0] / (2 * dCutoff)))
-				+ (1 + std::erfc((dTotalValue - vdNewGrid[nGrid] / (2 * dCutoff)))));
-			double dScaling = vdScalings[nRow] / (1.0 - dOverflow);
-
-			for (int nPos = 0; nPos < nGrid; ++nPos)
-			{
-				double dDiff = vdNewGrid[nPos] - dTotalValue;
-				double dKernel = (1 / sqrt(2 * dPi * dCutoff)) * exp(-pow(dDiff, 2) / (2 * pow(dCutoff, 2)));
-				vdFes[nPos] += dScaling * dKernel;
-			}
-
-			dDenom += dScaling;
+			double dDiff = vdNewGrid[nPos] - dTotalValue;
+			double dKernel = (1 / (sqrt(2 * dPi) * dCutoff)) * exp(-pow(dDiff, 2) / (2 * pow(dCutoff, 2)));
+			vdKernels.push_back(dKernel);
+			dKernelSum += dKernel;
 		}
+
+		for (int nPos = 0; nPos < nGrid; ++nPos)
+			vdFes[nPos] += dExpBias * vdKernels[nPos] / dKernelSum;
+
+		dDenom += dExpBias;
     }
 
     // Calculate FES values, find the minimum
@@ -419,7 +405,7 @@ vector<double> createNewGrid(std::pair<double, double> pdNewGridLimits, int nGri
 	return vdNewGrid;
 }
 
-int examineNewColvars(vector< vector<double> > &vvdNewColvars, vector<double> &vdCoefficients,
+int examineNewColvars(vector2d &vvdNewColvars, vector<double> &vdCoefficients,
 						std::pair<double, double> &pdNewGridLimits, int nColvars) 
 {
 	int nRows = vvdNewColvars.size();
@@ -440,15 +426,16 @@ int examineNewColvars(vector< vector<double> > &vvdNewColvars, vector<double> &v
 	return nRows;
 }
 
-pvd reweightFes(vector<double> &vdBias, vector2d &vvdNewColvars, vector<double> &vdCoefficients, vector<double> &vdEbetacList, 
-	vector<double> &vdScalings, InputData &sInput) 
+pvd reweightFes(vector<double> &vdBias, vector2d &vvdNewColvars, vector<double> &vdCoefficients, 
+	vector<double> &vdEbetacList, InputData &sInput) 
 {
 	std::pair<double, double> pdNewGridLimits = {dInf, -dInf};
 	int nRows = examineNewColvars(vvdNewColvars, vdCoefficients, pdNewGridLimits, sInput.vnNewColumns.size());
 
 	vector<double> vdNewGrid = createNewGrid(pdNewGridLimits, sInput.nGrid);
 
-	vector<double> vdFes = calculateNewFes(vdBias, vvdNewColvars, vdCoefficients, vdNewGrid, vdEbetacList, vdScalings, sInput, nRows);
+	vector<double> vdFes = calculateNewFes(vdBias, vvdNewColvars, vdCoefficients, vdNewGrid, vdEbetacList, sInput, 
+		nRows);
 
 	return pvd (vdNewGrid, vdFes);
 }
@@ -467,7 +454,7 @@ int examineNewColvars(vector<double> &vdNewColvar, std::pair<double, double> &pd
 }
 
 vector<double> calculateNewFes(vector<double> &vdBias, vector<double> &vdNewColvar, vector<double> &vdLimits,
-	vector<double> &vdNewGrid, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput, int nRows) 
+	vector<double> &vdNewGrid, vector<double> &vdEbetacList, InputData &sInput, int nRows) 
 {
 	int nGrid = sInput.nGrid;
 	int nColvars = sInput.vnNewColumns.size();
@@ -477,8 +464,8 @@ vector<double> calculateNewFes(vector<double> &vdBias, vector<double> &vdNewColv
     vector<double> vdFes(nGrid, 0.0);
 
     double dDenom = 0.0;
-    double dRatio = double(sInput.nFesFilesCount) / nRows;
     double dCutoff = (vdNewGrid[1] - vdNewGrid[0]) / 2;
+	double dRatio = double(sInput.nFesFilesCount) / nRows;
 
     // Testing applying z limits only to endpoints
     double dMinS = vdNewGrid[0] + 0.5;
@@ -490,45 +477,31 @@ vector<double> calculateNewFes(vector<double> &vdBias, vector<double> &vdNewColv
         if (vdLimits.empty() || ((vdNewColvar[nRow] <  dMinS || vdNewColvar[nRow] > dMaxS) && (vdLimits[nRow] < sInput.dZLimit)) ||
             ((dMinS <= vdNewColvar[nRow]) && (vdNewColvar[nRow] <= dMaxS)))
         {
-            double dBias = vdBias[nRow];
             double dTotalValue = vdNewColvar[nRow];
+			double dKernelSum = 0.0;
+			double dExpBias = exp(vdBias[nRow] / dkT);
 
-			// Using the work estimates
-			if (vdScalings.empty())
+			if (sInput.vnRBiasColumns.empty())
 			{
-				int nLocation = 0;
-
-				for (int nPos = 0; nPos < nGrid; ++nPos)
-				{
-					double dDiff = fabs(vdNewGrid[nPos] - dTotalValue);
-
-					if (dDiff < dCutoff)
-					{
-						nLocation = nPos;
-						break;
-					}
-				}
-
+				// Use estimates instead of rbias (which already includes the c(t))
 				int nIndex = int(ceil(float(nRow + 1) * dRatio)) - 1;
-
-				double dExpBias = exp(dBias / dkT) / vdEbetacList[nIndex];
-				vdFes[nLocation] += dExpBias;
-				dDenom += dExpBias;
+				dExpBias /= vdEbetacList[nIndex];
 			}
-			// Using the weights to create a weighted histogram
-			else
+
+			vector<double> vdKernels;
+
+			for (int nPos = 0; nPos < nGrid; ++nPos)
 			{
-				double dScaling = vdScalings[nRow];
-
-				for (int nPos = 0; nPos < nGrid; ++nPos)
-				{
-					double dDiff = vdNewGrid[nPos] - dTotalValue;
-					double dKernel = (1 / sqrt(2 * dPi * dCutoff)) * exp(-pow(dDiff, 2) / (2 * pow(dCutoff, 2)));
-					vdFes[nPos] += dScaling * dKernel;
-				}
-
-				dDenom += dScaling;
+				double dDiff = vdNewGrid[nPos] - dTotalValue;
+				double dKernel = (1 / (sqrt(2 * dPi) * dCutoff)) * exp(-pow(dDiff, 2) / (2 * pow(dCutoff, 2)));
+				vdKernels.push_back(dKernel);
+				dKernelSum += dKernel;
 			}
+
+			for (int nPos = 0; nPos < nGrid; ++nPos)
+				vdFes[nPos] += dExpBias * vdKernels[nPos] / dKernelSum;
+
+			dDenom += dExpBias;
         }
     }
 
@@ -550,15 +523,15 @@ vector<double> calculateNewFes(vector<double> &vdBias, vector<double> &vdNewColv
     return vdFes;
 }
 
-std::pair<vector<double>, vector<double>> reweightFes(vector<double> &vdBias, vector<double> &vdNewColvar, vector<double> &vdLimits,
-	vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput) 
+pvd reweightFes(vector<double> &vdBias, vector<double> &vdNewColvar, vector<double> &vdLimits,
+	vector<double> &vdEbetacList, InputData &sInput) 
 {
 	std::pair<double, double> pdNewGridLimits = {dInf, -dInf};
 	int nRows = examineNewColvars(vdNewColvar, pdNewGridLimits);
 
 	vector<double> vdNewGrid = createNewGrid(pdNewGridLimits, sInput.nGrid);
 
-	vector<double> vdFes = calculateNewFes(vdBias, vdNewColvar, vdLimits, vdNewGrid, vdEbetacList, vdScalings, sInput, nRows);
+	vector<double> vdFes = calculateNewFes(vdBias, vdNewColvar, vdLimits, vdNewGrid, vdEbetacList, sInput, nRows);
 
 	return pvd (vdNewGrid, vdFes);
 }
@@ -586,37 +559,58 @@ void normaliseCoefficients(vector<double> &vdCoefficients)
 		dValue /= dLength;
 }
 
-vector<double> perturbCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne) 
+bool checkLimits(vector<double>& vdCoefficients, vector<double>& vdLowerLimits, vector<double>& vdUpperLimits)
 {
-	vector<double> vdNewCoefficients = vdCoefficients;
-	std::normal_distribution<double> Distribution(0.0, 0.3);
-	double dLength = 0.0;
+	for (int nPos = 0; nPos < vdCoefficients.size(); ++nPos)
+		if (vdCoefficients[nPos] < vdLowerLimits[nPos])
+			return false;
 
-	for (double &dValue: vdNewCoefficients)
+	for (int nPos = 0; nPos < vdCoefficients.size(); ++nPos)
+		if (vdCoefficients[nPos] > vdUpperLimits[nPos])
+			return false;
+
+	return true;
+}
+
+vector<double> perturbCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne, double dLimit, 
+	vector<double> &vdLowerLimits, vector<double> &vdUpperLimits) 
+{
+	vector<double> vdNewCoefficients;
+	std::normal_distribution<double> Distribution(0.0, dLimit);
+	
+	do
 	{
-		dValue *= (1.0 + Distribution(Mersenne));
+		vdNewCoefficients = vdCoefficients;
 
-		while (dValue < 0.0)
-			dValue += 1.0;
-		while (dValue > 1.0)
-			dValue -= 1.0;
+		double dLength = 0.0;
+		for (int nPos = 0; nPos < vdNewCoefficients.size(); ++nPos)
+		{
+			vdNewCoefficients[nPos] *= (1.0 + Distribution(Mersenne));
 
-		dLength += pow(dValue, 2);
-	}
+			double dDiff = vdUpperLimits[nPos] - vdLowerLimits[nPos];
+			while (vdNewCoefficients[nPos] < vdLowerLimits[nPos])
+				vdNewCoefficients[nPos] += dDiff;
+			while (vdNewCoefficients[nPos] > vdUpperLimits[nPos])
+				vdNewCoefficients[nPos] -= dDiff;
 
-	dLength = sqrt(dLength);
+			dLength += pow(vdNewCoefficients[nPos], 2);
+		}
+		dLength = sqrt(dLength);
 
-	// Normalise
-	for (double &dValue: vdNewCoefficients)
-		dValue /= dLength;
+		// Normalise
+		for (double& dValue : vdNewCoefficients)
+			dValue /= dLength;
+	} 
+	while (!checkLimits(vdNewCoefficients, vdLowerLimits, vdUpperLimits));
 
 	return vdNewCoefficients;
 }
 
-vector<double> perturbPeriodicCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne, vector<double> &vdPeriodicRanges) 
+vector<double> perturbPeriodicCoefficients(vector<double> &vdCoefficients, std::mt19937 &Mersenne, 
+	vector<double> &vdPeriodicRanges, double dLimit) 
 {
 	vector<double> vdNewCoefficients = vdCoefficients;
-	std::normal_distribution<double> Distribution(0.0, 0.3);
+	std::normal_distribution<double> Distribution(0.0, dLimit);
 
 	for (unsigned int nCount = 0; nCount < vdNewCoefficients.size(); ++nCount)
 	{
@@ -639,23 +633,27 @@ vector<double> perturbPeriodicCoefficients(vector<double> &vdCoefficients, std::
 	return vdNewCoefficients;
 }
 
-vector<double> randomiseCoefficients(int nNumber, std::mt19937 &Mersenne) 
+vector<double> randomiseCoefficients(int nNumber, std::mt19937 &Mersenne, vector<double>& vdLowerLimits, 
+	vector<double>& vdUpperLimits)
 {
 	vector<double> vdCoefficients(nNumber, 0.0);
-	std::uniform_real_distribution<double> Distribution(0.0, 1.0);
-	double dLength = 0.0;
-
-	for (double &dValue: vdCoefficients)
+	
+	do
 	{
-		dValue = Distribution(Mersenne);
-		dLength += pow(dValue, 2);
+		double dLength = 0.0;
+		for (unsigned int nCount = 0; nCount < nNumber; ++nCount)
+		{
+			std::uniform_real_distribution<double> Distribution(vdLowerLimits[nCount], vdUpperLimits[nCount]);
+			vdCoefficients[nCount] = Distribution(Mersenne);
+			dLength += pow(vdCoefficients[nCount], 2);
+		}
+		dLength = sqrt(dLength);
+
+		// Normalise
+		for (double& dValue : vdCoefficients)
+			dValue /= dLength;
 	}
-
-	dLength = sqrt(dLength);
-
-	// Normalise
-	for (double &dValue: vdCoefficients)
-		dValue /= dLength;
+	while (!checkLimits(vdCoefficients, vdLowerLimits, vdUpperLimits));
 
 	return vdCoefficients;
 }
@@ -674,7 +672,7 @@ vector<double> randomisePeriodicCoefficients(int nNumber, std::mt19937 &Mersenne
 	return vdCoefficients;
 }
 
-int correctInfinities(vector<double> &vdNewFes, bool bAltInfinity) 
+int correctInfinities(vector<double> &vdNewFes, bool bAltInfinity, bool bVerbose) 
 {
 	int nInfCount = 0;
 
@@ -686,17 +684,20 @@ int correctInfinities(vector<double> &vdNewFes, bool bAltInfinity)
 
 	if (nInfCount > 0)
 	{
-		if (nInfCount == 1)
-			std::cout << "Detected 1 infinity in the reweighted FES" << std::endl;
-		else
-			std::cout << "Detected " << nInfCount << " infinities in the reweighted FES" << std::endl;
+		if (bVerbose)
+		{
+			if (nInfCount == 1)
+				std::cout << "Detected 1 infinity in the reweighted FES" << std::endl;
+			else
+				std::cout << "Detected " << nInfCount << " infinities in the reweighted FES" << std::endl;
+		}
 
 		if (bAltInfinity)
 			replaceInfinities(vdNewFes);
 		else
 			interpolateInfinities(vdNewFes);
 	}
-	else
+	else if (bVerbose)
 		std::cout << "No infinities detected in the reweighted FES" << std::endl;
 
 	return nInfCount;
@@ -811,7 +812,8 @@ vector2d convertPeriodic(vector2d &vvdColvars, vector<double> &vdPeriodicCoeffs,
 		{
 			if (vdPeriodics[nColumn] >= 0.0)
 			{
-				vdRow.push_back(0.5 + cos(vvdColvars[nRow][nColumn] - vdPeriodicCoeffs[nCount]));
+				vdRow.push_back(0.5 + cos(2 * dPi * (vvdColvars[nRow][nColumn] - vdPeriodicCoeffs[nCount]) / 
+					vdPeriodics[nColumn]));
 				++nCount;
 			}
 			else
@@ -824,10 +826,11 @@ vector2d convertPeriodic(vector2d &vvdColvars, vector<double> &vdPeriodicCoeffs,
 	return vvdConverted;
 }
 
-void calculatePath(vector2d &vvdNewColvarsPath, vector2d &vvdNewColvars, vector<double> vdCoefficients, vector<int> vnSnapshots,
-				   double dLambda, InputData &sInput, pvd &pvdPathValues) 
+void calculatePath(vector2d &vvdNewColvarsPath, vector2d &vvdNewColvars, vector<double> &vdCoefficients, 
+	vector<int> &vnSnapshots, double dLambda, InputData &sInput, pvd &pvdPathValues) 
 {
-	std::cout << "Calculating the path collective variables" << std::endl;
+	if (sInput.bVerbose)
+		std::cout << "Calculating the path collective variables" << std::endl;
 
 	static vector<double> vdPeriodicRanges;
 
@@ -911,14 +914,14 @@ Solution stopTrying(Solution &sCurrent, double dLambda, Path &cPath1, vector<int
 	return sCurrent;
 }
 
-Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, vector<double> &vdSummedBias,
-	vector2d &vvdNewColvars, vector2d &vvdNewColvarsPath, vector<double> &vdEbetacList, vector<double> &vdScalings, 
+// Used for COMet
+Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, 
+	vector<double> &vdSummedBias, vector2d &vvdNewColvars, vector2d &vvdNewColvarsPath, vector<double> &vdEbetacList,  
 	InputData &sInput, std::ofstream &LogOutput)
 {
 	Solution sCurrent;
 	sCurrent.vdCoefficients = vdCoefficients;
 
-	// The reweighting version
 	vector2d vvdConverted, vvdConvertedPath;
 
 	// Before anything, convert periodic variables to non-periodic ones
@@ -941,13 +944,13 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 	vector<int> vnSnapshots = cPath1.getSnapshots();
 	double dLambda = cPath1.getLambda();
 	double dBestEnergy = cPath1.getBestEnergy();
-	cPath1.saveDistances();
+	//cPath1.saveDistances();
 
 	// Second, calculate path variables for every point in new colvars and also path if 2D
 	vector<double> vdFirst, vdSecond;
 	vdFirst.reserve(vvdNewColvars.size());
 
-	if (sInput.dZLimit > 0.0)
+	if (sInput.dZLimit >= 0.0 || sInput.bPath2D)
 		vdSecond.reserve(vvdNewColvars.size());
 
 	pvd pvdPathValues (vdFirst, vdSecond);
@@ -972,7 +975,7 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 				return stopTrying(sCurrent, dLambda, cPath1, vnSnapshots, vdCoefficients, -1, dBestEnergy, LogOutput);
 		}
 
-		writeDataFile("snapshots_path_values.dat", vvdSnapshotPathValues);
+		// writeDataFile("snapshots_path_values.dat", vvdSnapshotPathValues);
 	}
 
 	// Third, reweight onto the s variable (possibly subject to z limits) or also z variable
@@ -992,11 +995,12 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 			vvdPathValues.push_back({vdSValues[nCount], vdZValues[nCount]});
 		}
 
-		std::cout << nCountInfs << " " << vdZValues.size() << std::endl;
+		if (sInput.bVerbose)
+			std::cout << nCountInfs << " " << vdZValues.size() << std::endl;
 
-		static vector<double> vdInfRatios;
+		// static vector<double> vdInfRatios;
 		double dInfRatio = static_cast<double>(nCountInfs) / vdZValues.size();
-		vdInfRatios.push_back(dInfRatio);
+		// vdInfRatios.push_back(dInfRatio);
 
 		// Not sure about this
 		// writeDataFile("inf_ratios.dat", vdInfRatios);
@@ -1007,11 +1011,11 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 
 	if (sInput.bPath2D)
 	{
-		std::pair<vector2d, vector<double>> pvdNewFesData = reweightFes(vdSummedBias, vvdPathValues, vvdSnapshotPathValues,
-			vdEbetacList, sInput);
+		std::pair<vector2d, vector<double>> pvdNewFesData = reweightFes(vdSummedBias, vvdPathValues, 
+			vvdSnapshotPathValues, vdEbetacList, sInput);
 
 		// Outputting the FES and also creating vector for assigning energies to snapshots
-		std::ofstream FesTest("generated_fes_2d.dat");
+		// std::ofstream FesTest("generated_fes_2d.dat");
 		double dPastZ = pvdNewFesData.first[0][1];
 		vector2d vvdNewFesData(pvdNewFesData.first.size(), vector<double>(3));
 
@@ -1019,7 +1023,7 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 		{
 			if (pvdNewFesData.first[nRow][1] != dPastZ)
 			{
-				FesTest << "\n";
+				// FesTest << "\n";
 				dPastZ = pvdNewFesData.first[nRow][1];
 			}
 
@@ -1027,10 +1031,10 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 			vvdNewFesData[nRow][1] = pvdNewFesData.first[nRow][1];
 			vvdNewFesData[nRow][2] = pvdNewFesData.second[nRow];
 
-			printNumbersToFile(FesTest, vvdNewFesData[nRow], true);
+			// printNumbersToFile(FesTest, vvdNewFesData[nRow], true);
 		}
 
-		FesTest.close();
+		// FesTest.close();
 
 		// Assign energies to path snapshots
 		vdSnapshotEnergies = assignSnapshotEnergies(vvdNewFesData, {0, 1}, 2, vvdSnapshotPathValues);
@@ -1038,21 +1042,21 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 	}
 	else
 	{
-		pvd pvdNewFesData = reweightFes(vdSummedBias, vdSValues, vdZValues, vdEbetacList, vdScalings, sInput);
+		pvd pvdNewFesData = reweightFes(vdSummedBias, vdSValues, vdZValues, vdEbetacList, sInput);
 		vdNewFes = pvdNewFesData.second;
-		writeDataFile("new_fes.dat", vdNewFes);
+		// writeDataFile("new_fes.dat", vdNewFes);
 	}
 
 	if (sInput.bPath2D)
 	{
-		sCurrent.nInfinities = correctInfinities(vdSnapshotEnergies, sInput.bAltInfinity);
+		sCurrent.nInfinities = correctInfinities(vdSnapshotEnergies, sInput.bAltInfinity, sInput.bVerbose);
 
 		if (sCurrent.nInfinities > 0)
 			return stopTrying(sCurrent, dLambda, cPath1, vnSnapshots, vdCoefficients, sCurrent.nInfinities, dBestEnergy, 
 				LogOutput);
 	}
 	else
-		sCurrent.nInfinities = correctInfinities(vdNewFes, sInput.bAltInfinity);
+		sCurrent.nInfinities = correctInfinities(vdNewFes, sInput.bAltInfinity, sInput.bVerbose);
 
 	// Fourth, construct a path corresponding to the FES in s variable and get spectral gap
 	Path cPath2;
@@ -1069,7 +1073,8 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 	std::cout << "Barriers: " << cPath2.getBarriers() << ", Spectral gap: " << cPath2.getSpectralGap() << std::endl;
 
 	sCurrent.nBarriers = cPath2.getBarriers();
-	sCurrent.dSpectralGap = cPath2.getSpectralGap();
+	if (sInput.nMinBarriers <= sCurrent.nBarriers)
+		sCurrent.dSpectralGap = cPath2.getSpectralGap();
 	sCurrent.dLambda = dLambda;
 	sCurrent.nViolations = cPath1.getViolations();
 	sCurrent.vnSnapshots = vnSnapshots;
@@ -1079,13 +1084,13 @@ Solution tryCoefficientsPath(vector<double> &vdCoefficients, vector<double> &vdP
 	return sCurrent;
 }
 
+// Used for SGOOP
 Solution tryCoefficients(vector<double> &vdCoefficients, vector<double> &vdPeriodicCoeffs, vector<double> &vdSummedBias,
-	vector2d &vvdNewColvars, vector<double> &vdEbetacList, vector<double> &vdScalings, InputData &sInput, std::ofstream &LogOutput)
+	vector2d &vvdNewColvars, vector<double> &vdEbetacList, InputData &sInput, std::ofstream &LogOutput)
 {
 	Solution sCurrent;
 	sCurrent.vdCoefficients = vdCoefficients;
 
-	// The reweighting version
 	vector2d vvdConverted;
 
 	// Before anything, convert periodic variables to non-periodic ones
@@ -1099,20 +1104,21 @@ Solution tryCoefficients(vector<double> &vdCoefficients, vector<double> &vdPerio
 
 	vector2d &rvvdConverted = sInput.bConvertPeriodic ? vvdConverted : vvdNewColvars;
 
-	pvd pvdNewFesData = reweightFes(vdSummedBias, rvvdConverted, vdCoefficients, vdEbetacList, vdScalings, sInput);
+	pvd pvdNewFesData = reweightFes(vdSummedBias, rvvdConverted, vdCoefficients, vdEbetacList, sInput);
 	vector<double> vdNewGrid = pvdNewFesData.first;
 	vector<double> vdNewFes = pvdNewFesData.second;
-	writeDataFile("new_fes.dat", vdNewFes);
+	// writeDataFile("new_fes.dat", vdNewFes);
 
-	sCurrent.nInfinities = correctInfinities(vdNewFes, sInput.bAltInfinity);
+	sCurrent.nInfinities = correctInfinities(vdNewFes, sInput.bAltInfinity, sInput.bVerbose);
 
 	Path cPath(vdNewFes, sInput, -1.0);
 
 	std::cout << "Barriers: " << cPath.getBarriers() << ", Spectral gap: " << cPath.getSpectralGap() << std::endl;
 	sCurrent.nBarriers = cPath.getBarriers();
-	sCurrent.dSpectralGap = cPath.getSpectralGap();
+	if (sInput.nMinBarriers <= sCurrent.nBarriers)
+		sCurrent.dSpectralGap = cPath.getSpectralGap();
 	sCurrent.dLambda = -1.0;
-	sCurrent.nViolations = -1.0;
+	sCurrent.nViolations = -1;
 
 	printLogLine(LogOutput, sInput, cPath, sCurrent.vdCoefficients, sCurrent.nInfinities);
 
@@ -1122,7 +1128,7 @@ Solution tryCoefficients(vector<double> &vdCoefficients, vector<double> &vdPerio
 void optimiseAndLog(Path &cPath, std::ofstream &LogOutput, Solution &sCurrent, InputData &sInput) 
 {
 	cPath.optimise();
-	cPath.saveDistances();
+	//cPath.saveDistances();
 
 	std::cout << "Barriers: " << cPath.getBarriers() << ", Spectral gap: " << cPath.getSpectralGap() << std::endl;
 

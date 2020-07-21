@@ -25,16 +25,18 @@ struct InputData
 	string strFesComplete;
 
 	// Further specifications of the files
-	int nScalingColumn = -1;
 	int nFreeEnergyColumn = -1;
 	int nFesFilesCount = -1;
 	int nFreeEnergyColumnComplete = -1;
 	vector<int> vnBiasColumns;
+	vector<int> vnRBiasColumns;
 	vector<int> vnNewColumns;
 	vector<int> vnNewColumnsPath;
 	vector<int> vnColvarColumns;
 	vector<int> vnColvarColumnsPath;
 	string strColvarFilePath;
+	vector<double> vdLowerLimits;
+	vector<double> vdUpperLimits;
 
 	// Periodicity specifications
 	vector<int> vnPeriodicColumns;
@@ -46,35 +48,44 @@ struct InputData
 	double dGamma = -1.0;  // Biasfactor, 0 for non-tempered metadynamics
 	int nGrid = -1;  // Number of bins to reweight to
 	int nLengthTarget = -1;  // Number of snapshots to use
+	int nLengthTolerance = 0;
 	double dAnnealingkT = -1.0;  // Initial kT for simulated annealing
 	int nAnnealingSteps = -1;
 
 	// Optional arguments
+	// Strings
 	string strLogFile = "log_spectral_gaps.dat";
-	bool bEuclidean = false;
-	bool bAltInfinity = false;
-	bool bLogEnergy = false;
-	int nLogEigenvalues = 0;
-	bool bRescale = true;
-	int nBarriers = -1;
-	int nTimeColumn = 0;
 	string strCoeffList;
-	bool bTryAll = false;
-	bool bRandom = false;
-	int nLengthTolerance = 0;
-	bool bStrictOrder = false;
-	bool bSPath = false;
-	bool bPath2D = false;
-	bool bLimitIncorrect = false;
+	string strPeriodicCoeffList;
+	// Integers
+	int nLogEigenvalues = 0;
+	int nBarriers = -2;
+	int nTimeColumn = 0;
+	int nSeed = -1;
+	int nMinBarriers = 0;
+	int nPrecision = 5;
+	// Doubles
 	double dInfLimit = 0.0;
 	double dCooling = -1.0;
 	double dThreshold = 1.0;
 	double dZLimit = -1.0;
+	double dPerturbationLimit = 0.3;
+	double dSmoothRatio = 0.03;
+	// Booleans
+	bool bAltInfinity = true;
+	bool bLogEnergy = true;
+	bool bSmoothCount = true;
+	bool bRescale = false;
+	bool bDescale = false;
+	bool bTryAll = false;
+	bool bRandom = false;
+	bool bStrictOrder = false;
+	bool bSPath = false;
+	bool bPath2D = false;
+	bool bLimitIncorrect = false;
 	bool bConvertPeriodic = false;
-	string strPeriodicCoeffList;
-	bool bSmoothCount = false;
 	bool bNoPath = false;
-	int nSeed = -1;
+	bool bVerbose = false;
 };
 
 #endif /* INPUTDATA_H_ */
